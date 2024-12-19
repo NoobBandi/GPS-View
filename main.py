@@ -1,12 +1,13 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
 from tkintermapview import TkinterMapView
+import customtkinter as ctk
 import gpxpy
 import os
 import time
 
 
-class GPXViewer(tk.Tk):
+class GPXViewer(ctk.CTk):
     def __init__(self):
         super().__init__()
 
@@ -16,44 +17,59 @@ class GPXViewer(tk.Tk):
         self.current_dir = os.path.dirname(os.path.abspath(__file__))
         print(f"當前工作目錄: {self.current_dir}")
 
+        # Create Map Frame
+        self.map_frame = ctk.CTkFrame(self)
+        self.map_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+
+        self.map_widget = TkinterMapView(self.map_frame, corner_radius=10)
+        self.map_widget.pack(fill=tk.BOTH, expand=True)
+
         # Create Control Frame
-        self.control_frame = ttk.Frame(self)
-        self.control_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.control_frame = ctk.CTkFrame(self)
+        self.control_frame.pack(padx=5, pady=20)
+
+        # Configure grid layout
+        self.control_frame.grid_columnconfigure(0, weight=1)
+        self.control_frame.grid_columnconfigure(1, weight=1)
+        self.control_frame.grid_columnconfigure(2, weight=1)
+        self.control_frame.grid_columnconfigure(3, weight=1)
+        self.control_frame.grid_columnconfigure(4, weight=1)
 
         # Create Button to Load GPX
-        self.load_gpx_btn = ttk.Button(
-            self.control_frame, text="載入 GPX", command=self.load_gpx)
-        self.load_gpx_btn.pack(side='left', padx=5)
+        self.load_gpx_btn = ctk.CTkButton(
+            self.control_frame, text="載入 GPX 文件", command=self.load_gpx)
+        self.load_gpx_btn.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
 
         # Create Clean GPX Button
-        self.clean_gpx_btn = ttk.Button(
-            self.control_frame, text="清除 GPX", command=self.clean_gpx)
-        self.clean_gpx_btn.pack(side='left', padx=5)
+        self.clean_gpx_btn = ctk.CTkButton(
+            self.control_frame, text="清除 GPX 文件", command=self.clean_gpx)
+        self.clean_gpx_btn.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
 
-        # Create Play Button
-        self.play_btn = ttk.Button(
-            self.control_frame, text="播放", command=self.toggle_play, state="disabled")
-        self.play_btn.pack(side='left', padx=5)
+        # Create Progress Bar and Play Button Frame
+        self.progress_play_frame = ctk.CTkFrame(self.control_frame)
+        self.progress_play_frame.grid(row=1, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
 
         # Create Progress Bar
         self.progress_var = tk.DoubleVar()
-        self.progress_bar = ttk.Scale(self.control_frame, from_=0, to=100,
-                                      orient='horizontal', variable=self.progress_var,
-                                      command=self.on_progress_change)
-        self.progress_bar.pack(side='left', fill='x', expand=True, padx=5)
+        self.progress_bar = ctk.CTkSlider(self.progress_play_frame, from_=0, to=100,
+              variable=self.progress_var,
+              command=self.on_progress_change)
+        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5, pady=5)
+
+        # Create Play Button
+        self.play_btn = ctk.CTkButton(
+            self.progress_play_frame, text="播放", command=self.toggle_play, state="disabled")
+        self.play_btn.pack(side=tk.LEFT, padx=5, pady=5)
 
         # Create Speed Control
         self.speed_var = tk.StringVar(value="1x")
-        self.speed_combobox = ttk.Combobox(self.control_frame,
-                                           values=["0.5x", "1x", "2x", "4x"],
-                                           textvariable=self.speed_var,
-                                           width=5,
-                                           state="readonly")
-        self.speed_combobox.pack(side='left', padx=5)
-
-        # Create Map Frame
-        self.map_widget = TkinterMapView(self, corner_radius=0)
-        self.map_widget.pack(fill=tk.BOTH, expand=True)
+        self.speed_combobox = ctk.CTkComboBox(self.control_frame,
+              values=["0.5x", "1x", "2x", "4x"],
+              variable=self.speed_var,
+              width=80,  # 增加寬度
+              state="readonly",
+              corner_radius=5)  # 圓角設計
+        self.speed_combobox.grid(row=1, column=4, padx=5, pady=5, sticky="w")
 
         self.map_path = None
         self.current_path = None
@@ -70,7 +86,7 @@ class GPXViewer(tk.Tk):
         ncut_lng = 120.7300
         self.map_widget.set_position(ncut_lat, ncut_lng)
         self.map_widget.set_zoom(17)
-        self.map_widget.set_marker(ncut_lat, ncut_lng, text="勤益科技大學")
+        self.map_widget.set_marker(ncut_lat, ncut_lng, text="NCUT")
 
     def clean_gpx(self):
         self.stop_animation()
