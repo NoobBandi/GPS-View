@@ -6,12 +6,34 @@ import gpxpy
 import os
 import time
 
+def process_track_points(points, threshold=0.0001):
+    """過濾重複點並平滑軌跡點."""
+    if not points or len(points) < 2:
+        return points
+
+    filtered_points = [points[0]]
+    for point in points[1:]:
+        last_point = filtered_points[-1]
+        if abs(point[0] - last_point[0]) > threshold or abs(point[1] - last_point[1]) > threshold:
+            filtered_points.append(point)
+
+    # 基本平滑處理（簡單平均法）
+    smoothed_points = []
+    for i in range(len(filtered_points)):
+        lat, lon, count = 0, 0, 0
+        for j in range(max(0, i - 1), min(len(filtered_points), i + 2)):  # 包含前後各1點
+            lat += filtered_points[j][0]
+            lon += filtered_points[j][1]
+            count += 1
+        smoothed_points.append((lat / count, lon / count))
+
+    return smoothed_points
 
 class GPXViewer(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("GPX 軌跡檢視器")
+        self.title("GPX 軌跡檢視器 (Beta v0.2)")
         self.geometry("1024x800")
 
         self.current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -106,7 +128,7 @@ class GPXViewer(ctk.CTk):
                 self.stop_animation()
                 self.map_widget.delete_all_marker()
                 self.map_widget.delete_all_path()
-                
+
                 with open(file_path, 'r', encoding='utf-8') as gpx_file:
                     gpx = gpxpy.parse(gpx_file)
 
@@ -116,27 +138,16 @@ class GPXViewer(ctk.CTk):
                         for point in segment.points:
                             self.track_points.append((point.latitude, point.longitude))
 
-                if len(self.track_points) >= 2:  # 確保至少有兩個點
-                    if self.current_path:
-                        self.map_widget.delete(self.current_path)
+                # 路線修正
+                self.track_points = process_track_points(self.track_points)
+                print(f"修正後的軌跡點數量: {len(self.track_points)}")
 
-                    # 初始只顯示起點
+                if len(self.track_points) >= 2:
                     self.map_widget.set_position(self.track_points[0][0], self.track_points[0][1])
                     self.map_widget.set_zoom(17)
-
-                    # 設置起點標記
-                    self.map_widget.set_marker(
-                        self.track_points[0][0], 
-                        self.track_points[0][1], 
-                        text="起點"
-                    )
-                    
-                    # 重置播放狀態
+                    self.map_widget.set_marker(self.track_points[0][0], self.track_points[0][1], text="起點")
                     self.current_point_index = 0
                     self.progress_var.set(0)
-                    print(f"已載入 GPX 檔案: {file_path}")
-                    print(f"軌跡點數量: {len(self.track_points)}")
-
                     self.play_btn.configure(state="normal")
                 else:
                     print("GPX 檔案中的點數量不足")
