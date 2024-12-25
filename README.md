@@ -1,4 +1,4 @@
-# GPS View GPS 定位資訊回放程式
+# GPS 定位資訊回放程式
 
 > NCUT 四慧一乙 Python 期末報告
 
