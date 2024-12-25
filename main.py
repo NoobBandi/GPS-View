@@ -1,10 +1,10 @@
 import tkinter as tk
-from tkinter import ttk, filedialog
+from tkinter import filedialog
 from tkintermapview import TkinterMapView
+from PIL import Image, ImageTk
 import customtkinter as ctk
 import gpxpy
 import os
-import time
 
 def process_track_points(points, threshold=0.0001):
     """過濾重複點並平滑軌跡點."""
@@ -29,11 +29,44 @@ def process_track_points(points, threshold=0.0001):
 
     return smoothed_points
 
+class ImageWindow(ctk.CTkToplevel):
+    def __init__(self):
+        super().__init__()
+        self.title("圖片預覽")
+        self.geometry("400x600")
+        
+        self.image_label = ctk.CTkLabel(self, text="")
+        self.image_label.pack(expand=True, fill="both", padx=10, pady=10)
+        
+        self.current_image = None
+
+    def update_image(self, image_path):
+        try:
+            # 載入圖片
+            pil_image = Image.open(image_path)
+            # 計算調整後的大小（保持比例）
+            display_size = (780, 580)
+            pil_image.thumbnail(display_size, Image.Resampling.LANCZOS)
+            
+            # 使用 CTkImage 替代 PhotoImage
+            ctk_image = ctk.CTkImage(
+                light_image=pil_image,
+                dark_image=pil_image,
+                size=pil_image.size
+            )
+            
+            # 更新標籤中的圖片
+            self.image_label.configure(image=ctk_image)
+            self.current_image = ctk_image 
+            
+        except Exception as e:
+            print(f"更新圖片時發生錯誤: {e}")
+
 class GPXViewer(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("GPX 軌跡檢視器 (Beta v0.2)")
+        self.title("GPX 軌跡檢視器 (Beta v0.3)")
         self.geometry("1024x800")
 
         self.current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -92,7 +125,13 @@ class GPXViewer(ctk.CTk):
               state="readonly",
               corner_radius=5)  # 圓角設計
         self.speed_combobox.grid(row=1, column=4, padx=5, pady=5, sticky="w")
+        
+        # 圖片相關變量
+        self.image_folder = r"D:\●●Python_Project●●\GPS\IMG_5840_frames"
+        self.total_frames = 6655
+        self.current_frame = 0
 
+        self.image_window = None
         self.map_path = None
         self.current_path = None
         self.track_points = []
@@ -102,6 +141,12 @@ class GPXViewer(ctk.CTk):
         self.animation_speed = 1.0  # 動畫播放速度倍率
 
         self.initialize_map()
+
+    def toggle_image_window(self):
+        if self.image_window is None or not self.image_window.winfo_exists():
+            self.image_window = ImageWindow()
+        else:
+            self.image_window.focus()
 
     def initialize_map(self):
         ncut_lat = 24.1448
@@ -115,16 +160,25 @@ class GPXViewer(ctk.CTk):
         self.map_widget.delete_all_marker()
         self.map_widget.delete_all_path()
         self.initialize_map()
+
         self.map_path = None
         self.track_points = []
         self.progress_var.set(0)
         self.play_btn.configure(state="disabled")
         print("已清除 GPX 軌跡")
+        
+        if self.image_window and self.image_window.winfo_exists():
+            self.image_window.destroy()
+            self.image_window = None
 
     def load_gpx(self):
         file_path = filedialog.askopenfilename(filetypes=[("GPX Files", "*.gpx")])
         if file_path:
             try:
+                # 檢查檔案名稱
+                gpx_filename = os.path.basename(file_path)
+                show_images = (gpx_filename == "2024-12-13_21-01-07.gpx")
+
                 self.stop_animation()
                 self.map_widget.delete_all_marker()
                 self.map_widget.delete_all_path()
@@ -141,6 +195,14 @@ class GPXViewer(ctk.CTk):
                 # 路線修正
                 self.track_points = process_track_points(self.track_points)
                 print(f"修正後的軌跡點數量: {len(self.track_points)}")
+                
+                # 只在特定 GPX 檔案時開啟圖片視窗
+                if show_images:
+                    self.toggle_image_window()
+                elif self.image_window and self.image_window.winfo_exists():
+                    # 如果載入其他 GPX 檔案，關閉已開啟的圖片視窗
+                    self.image_window.destroy()
+                    self.image_window = None
 
                 if len(self.track_points) >= 2:
                     self.map_widget.set_position(self.track_points[0][0], self.track_points[0][1])
@@ -179,34 +241,66 @@ class GPXViewer(ctk.CTk):
 
         # 確保至少有兩個點來繪製路徑
         if self.current_point_index < 1:
-            self.current_point_index = 1  # 確保至少有兩個點
+            self.current_point_index = 1
 
         # 更新路徑
         current_path = self.track_points[:self.current_point_index + 1]
-        if len(current_path) >= 2:  # 確保有足夠的點來繪製路徑
+        if len(current_path) >= 2:
             self.current_path = self.map_widget.set_path(current_path)
 
             # 更新進度條
-            progress = (self.current_point_index /
-                        (len(self.track_points) - 1)) * 100
+            progress = (self.current_point_index / (len(self.track_points) - 1)) * 100
             self.progress_var.set(progress)
 
             # 更新地圖視角
             current_pos = self.track_points[self.current_point_index]
             self.map_widget.set_position(current_pos[0], current_pos[1])
 
+            # 更新圖片
+            # 根據當前進度計算對應的圖片編號
+            if self.image_window and self.image_window.winfo_exists():
+                frame_index = int((self.current_point_index / len(self.track_points)) * self.total_frames)
+                image_path = os.path.join(self.image_folder, f"frame_{frame_index:06d}.jpg")
+                if os.path.exists(image_path):
+                    self.image_window.update_image(image_path)
+
             # 移動到下一個點
             self.current_point_index += 1
 
             # 設置動畫速度
             speed_value = float(self.speed_var.get().replace('x', ''))
-            delay = int(100 / speed_value)  # 基礎延遲100毫秒
+            delay = int(100 / speed_value)
 
             if self.current_point_index < len(self.track_points):
                 self.after(delay, self.animate_path)
             else:
                 self.stop_animation()
                 self.current_point_index = 0
+
+    def update_image(self, frame_index):
+        try:
+            # 格式化圖片文件名
+            image_path = os.path.join(self.image_folder, f"frame_{frame_index:06d}.jpg")
+            
+            if os.path.exists(image_path):
+                # 加載並調整圖片大小
+                image = Image.open(image_path)
+                # 調整圖片大小以適應顯示區域（例如寬度固定為400像素）
+                width = 400
+                ratio = width / image.width
+                height = int(image.height * ratio)
+                image = image.resize((width, height), Image.Resampling.LANCZOS)
+                
+                # 轉換為 CTk 可用的格式
+                photo = ImageTk.PhotoImage(image)
+                
+                # 更新標籤中的圖片
+                self.image_label.configure(image=photo)
+                self.image_label.image = photo  # 保持引用以防止垃圾回收
+                
+                print(f"已更新圖片: frame_{frame_index:06d}.jpg")
+        except Exception as e:
+            print(f"更新圖片時發生錯誤: {e}")
 
     def on_progress_change(self, value):
         if not self.is_playing and self.track_points:
@@ -215,12 +309,19 @@ class GPXViewer(ctk.CTk):
             self.current_point_index = index
             current_path = self.track_points[:index + 1]
             self.current_path = self.map_widget.set_path(current_path)
+            
+            # 更新圖片
+            if self.image_window and self.image_window.winfo_exists():
+                frame_index = int((float(value) / 100) * self.total_frames)
+                image_path = os.path.join(self.image_folder, f"frame_{frame_index:06d}.jpg")
+                if os.path.exists(image_path):
+                    self.image_window.update_image(image_path)
+            
             if index < len(self.track_points):
                 self.map_widget.set_position(
                     self.track_points[index][0],
                     self.track_points[index][1]
                 )
-
 
 if __name__ == "__main__":
     app = GPXViewer()
